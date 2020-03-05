@@ -8,7 +8,7 @@ jobs:
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
       with:
-        name: gschain/istio:727a623ccb17676fae8058cb1691207a9658a8d71bc7603d701e23b1a6037e6c
+        name: gschain/webhook:1ef3328282f31704b5802c1136bd117e8598fd9f437df8209ca87366c5ce9fcb
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         tag_names: true
