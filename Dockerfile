@@ -1,1 +1,1 @@
-FROM gcr.io/kubeflow-images-public/tensorflow-1.15.2-notebook-cpu:1.0.0
+FROM gcr.io/knative-releases/knative.dev/serving/cmd/queue@sha256:792f6945c7bc73a49a470a5b955c39c8bd174705743abf5fb71aa0f4c04128eb
