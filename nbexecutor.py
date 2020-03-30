@@ -25,7 +25,7 @@ import configparser
 
 def config():
     curpath = os.path.dirname(os.path.realpath(__file__))
-    cfgpath = os.path.join(curpath, 'nbdeploy.ini')
+    cfgpath = os.path.join(curpath, 'nbexecutor.ini')
     conf = configparser.ConfigParser()
     conf.read(cfgpath, encoding='utf-8')
     return conf
