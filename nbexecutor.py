@@ -8,7 +8,6 @@ import tornado.autoreload
 import tornado.web
 import tornado.gen
 import json
-import requests
 import nbformat
 import os
 import boto.s3.connection
@@ -20,16 +19,27 @@ from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
 from nbformat import NBFormatError
 from concurrent.futures import ThreadPoolExecutor
 from tornado.concurrent import run_on_executor
+from distutils.util import strtobool
+import configparser
+
+
+def config():
+    curpath = os.path.dirname(os.path.realpath(__file__))
+    cfgpath = os.path.join(curpath, 'nbdeploy.ini')
+    conf = configparser.ConfigParser()
+    conf.read(cfgpath, encoding='utf-8')
+    return conf
 
 
 class S3Storage(object):
     __default_bucket = 'nbexecutor'
+    __cfg = config()
 
     def __init__(self, bucket=__default_bucket):
-        self._host = '10.218.0.74'
-        self._port = 8099
-        self._access_key = 'AKIAIOSFODNN7EXAMPLE'
-        self._secret_key = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+        self._host = self.__cfg.get('s3', 'host')
+        self._port = int(self.__cfg.get('s3', 'port'))
+        self._access_key = self.__cfg.get('s3', 'access')
+        self._secret_key = self.__cfg.get('s3', 'secret')
         self._conn = boto.connect_s3(
             aws_access_key_id=self._access_key,
             aws_secret_access_key=self._secret_key,
@@ -51,7 +61,7 @@ class S3Storage(object):
         if filename == '':
             filename = 'jobConf.json'
         self.k.key = uniq_id + '/' + filename
-        local_dir = '/tmp/' + uniq_id
+        local_dir = self.__cfg.get('local', 'exedir') + '/' + uniq_id
         if os.path.exists(local_dir):
             self.k.get_contents_to_filename(local_dir + '/' + filename)
         else:
@@ -84,7 +94,7 @@ class S3Storage(object):
                 self.download_s3(uniq_id, running_resource)
 
     def _get_running_config(self, uniq_id):
-        local_file = '/tmp/' + uniq_id + '/jobConf.json'
+        local_file = self.__cfg.get('local', 'exedir') + '/' + uniq_id + '/jobConf.json'
         try:
             with open(local_file, 'rb') as f:
                 data = f.read().decode()
@@ -106,9 +116,10 @@ class VersionHandler(tornado.web.RequestHandler):
 
 class ExecuteHandler(tornado.web.RequestHandler):
     executor = ThreadPoolExecutor(max_workers=16)
+    __cfg = config()
 
     @tornado.gen.coroutine
-    def get(self, uniq_id):
+    def post(self, uniq_id):
         config = self._get_config(uniq_id)
         ret = yield self._run_notebook(config)
         self.write(json.dumps(ret, ensure_ascii=False, indent=4))
@@ -126,7 +137,7 @@ class ExecuteHandler(tornado.web.RequestHandler):
         self.running_script = running_config['running_script']
         self.running_params = running_config['running_params']
         self.running_resources = running_config['running_resources']
-        self.local_dir = '/tmp/' + self.uniq_id + '/'
+        self.local_dir = self.__cfg.get('local', 'exedir') + '/' + self.uniq_id + '/'
         file_type = self.running_script.split('.')
         if file_type[-1] == 'ipynb':
             ret = self.__run_ipynb()
@@ -159,14 +170,19 @@ class ExecuteHandler(tornado.web.RequestHandler):
             nb = nbformat.read(self.local_dir + self.running_script, as_version=4)
         except NBFormatError as e:
             msg = str(e)
+            nb = None
         ep = ExecutePreprocessor(kernel_name='python3')
-        try:
-            out = ep.preprocess(nb, {'metadata': {'path': '/tmp/' + self.uniq_id + '/'}})
-        except CellExecutionError:
-            out = (None,)
-            msg = 'Error executing the notebook "%s".\n\n' % self.local_dir + self.running_script
-        finally:
-            shutil.rmtree(self.local_dir)
+        if nb != None:
+            try:
+                out = ep.preprocess(nb, {'metadata': {'path': self.__cfg.get('local', 'exedir') +
+                                         '/' + self.uniq_id + '/'}})
+            except CellExecutionError:
+                out = (None,)
+                msg = 'Error executing the notebook "%s".\n\n' % self.local_dir + self.running_script
+            finally:
+                shutil.rmtree(self.local_dir)
+        else:
+            raise OSError
 
         data = out[0]
         if out[0] != None:
@@ -180,21 +196,9 @@ class ExecuteHandler(tornado.web.RequestHandler):
         return ret
 
 
-'''
-class RegisterHandler(tornado.web.RequestHandler):
-    def post(self, filename):
-        if filename == '':
-            filename = 'test.ipynb'
-        url = 'http://172.21.1.231:12345/mrst/synergism/register'
-        headers = {'Content-Type': 'application/json;charset=UTF-8'}
-        body = {'platformId': 5, 'restfulUrl': 'http://10.218.0.67:8000/nb/v1/execute/' + filename,
-                'taskName': 'nb_' + filename, 'thirdPartyTaskId': str(random.randint(100000, 999999))}
-        ret = requests.post(url, headers=headers, data=json.dumps(body)).text
-        self.write(ret)
-'''
-
-
 class Application(tornado.web.Application):
+    __cfg = config()
+
     def __init__(self):
         handlers = [
             (r'/', IndexHandler),
@@ -206,16 +210,17 @@ class Application(tornado.web.Application):
             'cookie_secret': 'HeavyMetalWillNeverDie!!!',
             'xsrf_cookies': False,
             'gzip': True,
-            'debug': True,
-            'autoreload': True,
+            'debug': strtobool(self.__cfg.get('local', 'debug')),
+            'autoreload': strtobool(self.__cfg.get('local', 'autoreload')),
             'xheaders': True
         }
         tornado.web.Application.__init__(self, handlers, **settings)
 
 
 if '__main__' == __name__:
+    __cfg = config()
     server = tornado.httpserver.HTTPServer(Application())
-    server.listen(8000)
+    server.listen(int(__cfg.get('local', 'port')))
     loop = tornado.ioloop.IOLoop.instance()
     tornado.autoreload.start(loop)
     loop.start()

@@ -1,4 +1,5 @@
 tornado
 boto
+requests
 nbformat
 nbconvert
