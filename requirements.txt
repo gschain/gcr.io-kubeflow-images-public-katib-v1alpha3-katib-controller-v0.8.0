@@ -5,4 +5,4 @@ requests
 nbformat
 nbconvert
 tensorflow
-pytorch
+torch
