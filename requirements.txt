@@ -1,5 +1,8 @@
+jupyter
 tornado
 boto
 requests
 nbformat
 nbconvert
+tensorflow
+pytorch
