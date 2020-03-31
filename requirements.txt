@@ -4,5 +4,5 @@ boto
 requests
 nbformat
 nbconvert
-tensorflow
-torch
+#tensorflow
+#torch
