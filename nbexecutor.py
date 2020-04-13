@@ -25,7 +25,7 @@ import configparser
 
 def config():
     curpath = os.path.dirname(os.path.realpath(__file__))
-    cfgpath = os.path.join(curpath, 'nbexecutor.ini')
+    cfgpath = os.path.join("/etc/nbdeploy", 'nbexecutor.ini')
     conf = configparser.ConfigParser()
     conf.read(cfgpath, encoding='utf-8')
     return conf
@@ -79,8 +79,10 @@ class S3Storage(object):
     def download_s3(self, uniq_id, filename=''):
         try:
             self.download_file(uniq_id, filename)
+            return True
         except S3ResponseError as e:
             print(e)
+            return False
 
     def _parse_config_file(self, uniq_id):
         return self._get_running_config(uniq_id)
@@ -176,9 +178,10 @@ class ExecuteHandler(tornado.web.RequestHandler):
             try:
                 out = ep.preprocess(nb, {'metadata': {'path': self.__cfg.get('local', 'exedir') +
                                          '/' + self.uniq_id + '/'}})
-            except CellExecutionError:
+            except CellExecutionError as e:
                 out = (None,)
-                msg = 'Error executing the notebook "%s".\n\n' % self.local_dir + self.running_script
+                msg = 'Error executing the notebook "%s".' % self.local_dir + self.running_script + '\n\n'
+                msg += 'Reason: %s' % e
             finally:
                 shutil.rmtree(self.local_dir)
         else:
@@ -186,11 +189,11 @@ class ExecuteHandler(tornado.web.RequestHandler):
 
         data = out[0]
         if out[0] != None:
-            stdouts = ''
-            for cell in data['cells']:
-                for output in cell['outputs']:
-                    stdouts += output['text']
-            ret = {'statusCode': 200, 'data': stdouts}
+            #stdouts = ''
+            #for cell in data['cells']:
+                #for output in cell['outputs']:
+                    #stdouts += output['text']
+            ret = {'statusCode': 200, 'data': 'successed'}
         else:
             ret = {'statusCode': 500, 'data': 'Internal Server Error: ' + msg}
         return ret
@@ -224,3 +227,18 @@ if '__main__' == __name__:
     loop = tornado.ioloop.IOLoop.instance()
     tornado.autoreload.start(loop)
     loop.start()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
